@@ -1,0 +1,455 @@
+---
+title: "Indian Liver Patient"
+author: "Pinar Asker"
+date: "7/12/2021"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  word_document: default
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+  knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# 1. INTRODUCTION
+
+The "Indian Liver Patient Records" dataset available on the Kaggle website was used in this project.
+The project aims to examine the factors related to liver cancer for a group of people from India and develop machine learning models based on these factors to predict whether a person has liver disease or not. Thus, the inspiration of this project is to provide statistical modeling for liver disease detection and help doctors predict the disease. 
+The dataset consists of 416 liver patient records and 167 non-liver patient records, along with related variables. There are 11 variables which are,
+
+•	Age of the patient 
+•	Gender of the patient 
+•	Total Bilirubin 
+•	Direct Bilirubin 
+•	Alkaline Phosphatase 
+•	Alamine Aminotransferase 
+•	Aspartate Aminotransferase 
+•	Total Proteins 
+•	Albumin 
+•	Albumin and Globulin Ratio 
+•	Disease: field used to split the data into two sets (patient with liver disease or no disease)
+
+The scientific definition of the variables above is beyond this project's scope. Instead, I characterized variables are only by quantitative or qualitative variables in this project. Quantitative variables are numerical variables, whereas qualitative variables take on categorical variables. "Dataset" variable, which indicates a patient with liver disease or no disease, and "Gender" variables are qualitative, and remaining variables are quantitative. 
+
+In the statistical models in this project, the "Disease" variable is used as a dependent(response) variable, and the remaining variables are used as dependent variables.  I am interested in the prediction of the dependent variable ("Disease") based on independent variables (remaining variables).
+
+Since the response (dependent) variable is qualitative(categorical), I considered classification models in this project. Classification models assign each record to a class that is most likely based on dependent variables. However, linear regression models are also can be considered for categorical response variables. 
+
+I built two different classification models to predict the "Disease." First, I built logistic regression models with varying combinations of dependent variables and with different thresholds values. Second, I built KNN models with the different "k" values. 
+
+In order to evaluate how well a model's prediction matches the actual data, I used three measures to quantify it such as model accuracy, specificity, and sensitivity. Accuracy is a measure of fit of a model, and it is a proportion of correctly predicted values to the total number of predicted values. Specificity refers to the percentage of predicting liver patients as liver patients. Sensitivity is the percentage of predicting non-liver patients as non-liver patient in this project. 
+
+I obtained the models' accuracy, specificity, and sensitivity values by applying these models to test data.
+
+I concluded the final model as the logistic regression model with an accuracy of 0.752.
+
+
+
+
+# 2. DATA LOADING
+As the first step, I loaded the data into R. Second, I checked for missing values and removed them from the data. In addition, I checked data for columns names, types of variables, and any anomalies that might be in the dataset. 
+
+
+
+```{r,echo=FALSE,results=FALSE,message=FALSE, warning=FALSE}
+if (!require(dplyr)) install.packages('dplyr')
+if (!require(car)) install.packages('car')
+if (!require(caret)) install.packages('caret')
+if (!require(tidyverse)) install.packages('tidyverse')
+if (!require(purrr)) install.packages('purrr')
+library(dplyr)
+library(car)
+library(caret)
+library(tidyverse)
+library(purrr)
+
+data=read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/00225/Indian%20Liver%20Patient%20Dataset%20(ILPD).csv", header=FALSE)
+
+names(data)=c("Age","Gender","Total_Bilirubin","Direct_Bilirubin","Alkaline_Phosphotase","Alamine_Aminotransferase",
+        "Aspartate_Aminotransferase","Total_Protiens","Albumin","Albumin_and_Globulin_Ratio","Disease") 
+
+summary(data)
+str(data)
+sum(is.na(data)) # 4
+data=na.omit(data)
+data$Disease[data$Disease==2]=0
+
+```
+
+# 3. VISUAL SUMMARY OF THE DATA
+
+
+Visual summaries can be very helpful to understand the data and reveal the relationship between variables. 
+
+## 3.1.Scatterplots
+
+```{r,echo=FALSE,results=FALSE,message=FALSE, warning=FALSE}
+attach(data)
+par(mfrow=c(3,3))
+plot(Age)
+plot(Total_Bilirubin)
+plot(Alkaline_Phosphotase)
+plot(Alamine_Aminotransferase)
+plot(Total_Protiens)
+plot(Albumin)
+plot(Albumin_and_Globulin_Ratio)
+plot(Direct_Bilirubin)
+plot(Aspartate_Aminotransferase)
+
+```
+The chart above shows the scatterplot of each forecast variable in the dataset. There seem to be some high leverage points in the dataset; in other words, some observations in the data set are far away from other observations. However, we do not have enough information to decide whether these are true outliers or not. Therefore, I did not remove these data points from the dataset.  
+
+## 3.2. The Effect of the Gender on Liver Disease
+
+```{r,echo=FALSE,results=FALSE,message=FALSE, warning=FALSE}
+data%>%group_by(Gender,Disease)%>%summarise(n=n())
+female_ratio=as.numeric(91/(49+91))
+male_ratio=as.numeric(323/(116+323))
+ratio<-c(female_ratio,male_ratio)
+names(ratio)<-c("female_ratio","male_ratio")
+barplot(ratio)
+```
+
+
+According to the graph above, males tend to have slightly more liver disease than women. Since there seems no significant difference between the two genders in liver disease, I excluded the gender from the models.
+
+## 3.3. The Effect of Age on Liver Disease
+
+```{r,echo=FALSE,results=FALSE,message=FALSE, warning=FALSE}
+ggplot(data, aes(x=as.factor(Disease),y=Age))+geom_boxplot(fill="blue",alpha=0.2)+xlab("Disease")
+```
+
+
+The boxplots show older patients more subject to the disease compared to younger patients in the dataset. Therefore, I include the "Age" variable in the models. 
+
+# 4. DATA ANALYSIS
+
+
+## 4.1 Data Partitioning
+
+I divided the data into train set and test set by 30 percent and 70 percent, respectively. Although the data can be divided by other percentages, I decided to split the dataset by this ratio due to the limited observation in the data.
+
+```{r,results=FALSE,message=FALSE, warning=FALSE}
+
+set.seed(1)
+test_index<-createDataPartition(data$Disease,times=1,p=0.3,list=F)
+train_data<-data %>% slice(-test_index)
+test_data<-data %>% slice(test_index)
+dim(train_data)
+dim(test_data)
+
+```
+
+
+## 4.2. Logistic Regression and Collinearity Diagnosis
+
+
+### 4.2.1. Model 1 : Logistic Regression Model with All Variables
+
+First, I built a logistic regression model with all variables in the dataset.
+
+```{r,message=FALSE, warning=FALSE}
+glm_fit_1<-glm(Disease~.,train_data, family=binomial)
+summary(glm_fit_1)
+```
+
+
+
+
+**The confusion matrix is shown below.**
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+p_hat_glm_1<-predict(glm_fit_1,newdata=test_data,type="response")
+y_hat_glm_1<-ifelse(p_hat_glm_1<0.5,0,1)
+cm1<- confusionMatrix(as.factor(y_hat_glm_1),as.factor(test_data$Disease))
+cm1$table
+
+```
+
+
+
+**Evaluation of the model on the test data is shown below.**
+```{r warning=FALSE}
+results=tibble(Model="glm_fit_1", Accuracy=cm1$overall["Accuracy"], 
+Sensitivity=cm1$byClass["Sensitivity"], Specificity= cm1$byClass["Specificity"])
+results%>%knitr::kable()
+
+```
+
+Before moving forward on analysis, I checked the collinearity between variables to improve model.  Collinearity means a close relationship between dependent variables (predictor variables) in the dataset. In other words, two or more predictor variables might have a linear relationship and move together in the same direction. Collinearity might be a problem in a regression model. Regression analysis can be adversely affected by collinearity because it may be hard to differentiate individual effects of variables in the model.
+
+I used variance inflation factor (VIF) to quantify collinearity. VIF is a calculation for collinearity. As a thumb of rule, VIF values greater than 5 or 10 are considered as high collinearity between any two predictor variables in the model. I removed one of the variables with a VIF value greater than 10 and re-built the model with the remaining variables.
+
+
+
+
+### 4.2.2 VIF Values to Detect Collineartiy
+
+```{r}
+vif(glm_fit_1)
+```
+
+
+
+```{r}
+pairs(data[,-2])
+```
+
+
+According to the VIF values and the matrix of the scatterplots above, "Total Bilirubin" and "Direct Bilirubin" are correlated.  Additionally, "Total Proteins" and "Albumin" variables are also correlated. Therefore, I removed one of the correlated variables from the model. Those are "Total Bilirubin" and "Albumin." I also removed the "Gender" variable since there is no significant difference between the two genders in liver disease.  
+
+
+
+
+### 4.2.3. Model 2: Logistic Regression After Removing Correlated Predictor Variables
+
+I built the logistic regression model again with remaining variables.
+
+```{r,message=FALSE, warning=FALSE}
+
+glm_fit_2<-glm(Disease~Age+Direct_Bilirubin+Alkaline_Phosphotase+
+Alamine_Aminotransferase+Aspartate_Aminotransferase+
+Total_Protiens+Albumin_and_Globulin_Ratio,train_data,family=binomial)
+
+summary(glm_fit_2)
+```
+
+
+
+
+**The confusion matrix of the model 2 is shown below.**
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+p_hat_glm_2<-predict(glm_fit_2,newdata=test_data,type="response")
+y_hat_glm_2<-ifelse(p_hat_glm_2<0.5,0,1)
+cm2<- confusionMatrix(as.factor(y_hat_glm_2),as.factor(test_data$Disease))
+cm2$table
+
+```
+
+
+
+
+**Evaluation of the models on test data is shown below.**
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+results=tibble(Model=c("glm_fit_1","glm_fit_2"), Accuracy=c(cm1$overall["Accuracy"],cm2$overall["Accuracy"]), Sensitivity=c(cm1$byClass["Sensitivity"],cm2$byClass["Sensitivity"]), Specificity=c(cm1$byClass["Specificity"],cm2$byClass["Specificity"]))
+results%>%knitr::kable() 
+```
+
+
+
+
+### 4.2.4.  Model 3: Logistic Regression After Removing Insignificant Variables
+
+I removed the insignificant variables from the previous model according to the p-values and rebuilt the model.
+
+```{r,message=FALSE, warning=FALSE}
+glm_fit_3 <- glm(Disease~Age+Direct_Bilirubin+Alkaline_Phosphotase, train_data, 
+family=binomial)
+summary(glm_fit_3)
+```
+
+
+
+
+**The confusion matrix of the model 3 is shown below.**
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+p_hat_glm_3<-predict(glm_fit_3,newdata=test_data,type="response")
+y_hat_glm_3<-ifelse(p_hat_glm_3<0.5,0,1)
+cm3<- confusionMatrix(as.factor(y_hat_glm_3),as.factor(test_data$Disease))
+cm3$table
+
+```
+
+
+
+
+**Evaluation of the models on test data is shown below.**
+```{r,echo=FALSE,message=FALSE, warning=FALSE}
+results=tibble(Model=c("glm_fit_1","glm_fit_2","glm_fit_3"), Accuracy=c(cm1$overall["Accuracy"],
+cm2$overall["Accuracy"],cm3$overall["Accuracy"])                                               , Sensitivity=c(cm1$byClass["Sensitivity"],cm2$byClass["Sensitivity"],cm3$byClass["Sensitivity"]), Specificity=c(cm1$byClass["Specificity"],cm2$byClass["Specificity"],cm3$byClass["Specificity"]))
+results%>%knitr::kable()
+```
+
+
+Now, all variables in the model are significant. I finalized the variable selection for logistic regression and built the model with only "Age", "Direct_Bilirubin", and "Alkaline_Phosphotase" variables.
+
+
+I performed  logistic regression  with 0.5 as the cut-off for the predicted probability so far. Although logistic regression models are created with mostly 0.5 probability cut-off values, we can use other cut-off values to predict the classes. I used different thresholds ranging from 0.5 to 0.75 to predict liver cancer patients to be sure that 0.5 cutoff value is the best option for our model. 
+
+
+
+
+### 4.2.5. Different Predicted Probabilty Cutoff Values for Logistic Regression.
+
+
+```{r, echo=FALSE}
+cutoff<- seq(0.5,0.75,length=20)
+
+log_reg_accuracy<-map_df(cutoff,function(c){
+  
+  set.seed(1)
+  p_hat_lg<-predict(glm_fit_3,newdata=test_data,type="response")
+  y_hat_lg<-ifelse(p_hat_lg< c,0,1)
+  confusionMatrix(as.factor(y_hat_lg),as.factor(test_data$Disease))
+  tibble(test_accuracy=confusionMatrix(as.factor(y_hat_lg),as.factor(test_data$Disease))$overall["Accuracy"], cutoff=c)
+})
+
+log_reg_accuracy%>%ggplot()+
+  geom_line(aes(cutoff,test_accuracy),color="blue")+geom_point(data=.%>%filter(test_accuracy==max(test_accuracy)),aes(cutoff,test_accuracy),color='blue',size=3)+
+  geom_label(data=.%>%filter(test_accuracy==max(test_accuracy)),aes(cutoff,test_accuracy,label=sprintf('%0.2f',test_accuracy)),hjust=-0.35)+
+  labs(title="Accuracy for Different Cutoff Values in Logistic Regression", y="test accuracy",x="cutoff")+
+  scale_x_continuous(breaks = seq(0.5,0.75,by=0.1))
+```
+
+
+
+As we can see in the graph, the highest accuracy (0.75) was calculated with a threshold of 0.5. Therefore, I used 0.5 as the predicted probability cutoff for logistic regression to predict whether a person has liver disease or not. 
+
+
+
+## 4.3. KNN Models
+The K-nearest neighbors method is the second classification model in this project.
+
+
+
+
+### 4.3.1 Scaling the Variables
+
+KNN models are based on the distance between variables. It predicts the class of a new (test) variable which is nearest to that point. Variables in different scales may lead to unrealistic results in the model, so all variables should be on the same scale. Therefore, I applied KNN models to Indian Liver Patient data after standardizing all quantitive predictor variables. Since variable 2 ( Gender)  and variable 11 ( Disease) are categorical, I exclude them during standardization.
+
+```{r,echo=FALSE,results=FALSE,message=FALSE, warning=FALSE}
+data_standardized=scale(data[,-c(2,11)])
+data_standardized=as.data.frame(data_standardized)
+data_standardized$Disease=data$Disease
+data_standardized$Gender=data$Gender
+summary(data)
+summary(data_standardized)
+
+```
+
+
+
+
+### 4.3.2 Data Partitioning
+
+After standardization, I partitioned the data into a train set and a test set. The test set contains 30% of the total observations, and the train set contains the remaining observations.
+
+```{r}
+set.seed(100)
+test_index_st<-createDataPartition(data_standardized$Disease,times=1,p=0.3,list=F)
+train_data_st<-data_standardized %>% slice(-test_index_st)
+test_data_st<-data_standardized %>% slice(test_index_st)
+train_data_st$Disease=as.factor(train_data_st$Disease)
+test_data_st$Disease=as.factor(test_data_st$Disease)
+```
+
+
+
+
+### 4.3.3 The First KNN Model
+
+I built k-nearest neighbors (kNN) model with k=5 to predict liver patients based on the variables in the dataset and test the final KNN model's accuracy on test data.
+
+```{r,message=FALSE, warning=FALSE}
+set.seed(1)
+knn_fit_1 <- knn3(Disease ~ ., data = train_data_st, k=5) 
+y_hat_knn_1 <- predict(knn_fit_1, test_data_st, type = "class")
+
+```
+
+
+
+
+**The confusion matrix is shown below.**
+```{r,echo=FALSE}
+cm4<-confusionMatrix(y_hat_knn_1, test_data_st$Disease)
+cm4$table
+```
+
+
+
+
+**Evaluation of the models on test data is shown below.**
+```{r,echo=FALSE}
+
+results=tibble(Model=c("glm_fit_1","glm_fit_2","glm_fit_3","knn_1"), Accuracy=c(cm1$overall["Accuracy"],cm2$overall["Accuracy"],cm3$overall["Accuracy"],cm4$overall["Accuracy"]), Sensitivity=c(cm1$byClass["Sensitivity"],cm2$byClass["Sensitivity"],cm3$byClass["Sensitivity"],cm4$byClass["Sensitivity"]), Specificity=c(cm1$byClass["Specificity"],cm2$byClass["Specificity"],cm3$byClass["Specificity"],cm4$byClass["Specificity"]))
+results%>%knitr::kable() 
+```
+
+
+
+
+### 4.3.4. Selecting optimum 'k'value.
+
+'k' refers to the number of nearest neighbors in a KNN model. The choice of a "k" is crucial and can yield dramatically different results. 
+
+To pick up the best 'k' value, I built KNN models with the different 'k' values ranging from 1 to 20. 
+
+```{r , echo=FALSE}
+ks<-seq(1,20)
+
+accuracy <- map_df(ks, function(k){
+  set.seed(1)
+  fit <- knn3(Disease ~ ., data =train_data_st, k = k)
+  y_hat <- predict(fit, train_data_st, type = "class") 
+  cm_train <- confusionMatrix(y_hat, train_data_st$Disease) 
+  train_error <- cm_train$overall["Accuracy"]
+  
+  y_hat <- predict(fit, test_data_st, type = "class") 
+  cm_test <- confusionMatrix(y_hat, test_data_st$Disease) 
+  test_error <- cm_test$overall["Accuracy"]
+  tibble(train = train_error, test = test_error, k=k) })
+
+
+accuracy%>%ggplot()+geom_line(aes(k,train),color="red")+
+  geom_line(aes(k,test),color="blue")+geom_point(data=.%>%filter(test==max(test)),aes(k,test),color='blue',size=3)+
+  geom_label(data=.%>%filter(test==max(test)),aes(k,test,label=sprintf('%0.2f',test)),vjust=-0.5)+
+  labs(title="Picking the k in KNN", y="train / test accuracy",x="k")+
+  scale_x_continuous(breaks = round(seq(min(accuracy$k), max(accuracy$k), by = 1),1))
+```
+The red line and blue line reflect train accuracy and test accuracy, respectively. As seen in the graph, the best test accuracy was achieved with the 'k' value of 9. Therefore, I repeated the KNN model with 9 nearest neighbors. 
+
+```{r,message=FALSE, warning=FALSE}
+set.seed(1)
+knn_fit_1 <- knn3(Disease ~ ., data = train_data_st, k=9) 
+y_hat_knn_1 <- predict(knn_fit_1, test_data_st, type = "class")
+
+```
+
+
+
+**The confusion matrix is shown below.**
+```{r,echo=FALSE}
+cm5<-confusionMatrix(y_hat_knn_1, test_data_st$Disease)
+cm5$table
+```
+
+
+
+
+**Evaluation of the models on test data is shown below.**
+```{r,echo=FALSE}
+results=tibble(Model=c("glm_fit_1","glm_fit_2","glm_fit_3","knn_1","knn_2"), Accuracy=c(cm1$overall["Accuracy"],cm2$overall["Accuracy"],cm3$overall["Accuracy"],cm4$overall["Accuracy"],cm5$overall["Accuracy"]), Sensitivity=c(cm1$byClass["Sensitivity"],cm2$byClass["Sensitivity"],cm3$byClass["Sensitivity"],cm4$byClass["Sensitivity"],cm5$byClass["Sensitivity"] ), Specificity=c(cm1$byClass["Specificity"],cm2$byClass["Specificity"],cm3$byClass["Specificity"],cm4$byClass["Specificity"],cm5$byClass["Specificity"]))
+results%>%knitr::kable() 
+```
+
+
+
+# 5. RESULTS AND CONCLUSION
+
+The evaluation of all models is summarized in the table above. Values show the models' prediction performance on the test data. The first three models ( glm_fit_1, 2, 3) were developed with a logistic regression model with a different set of predictors variables. The selection of the variables is detailed in the analysis section.  The remaining models (knn_1 and knn_2) were developed with the KNN method. 
+
+According to the table, the glm_fit_3 model predicts the liver patient with the highest accuracy and Specificity among all models. However, this model comes at a cost on the sensitivity. Sensitivity is the percentage of predicting non-liver patients as non-liver patients in this project. Specificity refers to the percentage of predicting liver patients as liver patients. 
+
+There is always a trade-off between sensitivity and Specificity.  Selecting the best model depends on the need of the project. In some projects, the sensitivity might be more critical compared to Specificity, or vice versa. 
+
+
+In this project, I decided on the final model based on accuracy. Therefore, I concluded that logistic regression model 3 (glm_fit_3)  is the best model to predict liver patients based on their characteristics. 
+
+For future works, some other classification methods such as classification trees can be applied to improve accuracy. 
+
+
+
+
+
