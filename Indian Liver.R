@@ -1,4 +1,4 @@
-
+#updated#
 
 #Loading required packages####
 if (!require(dplyr)) install.packages('dplyr')
@@ -212,7 +212,7 @@ y_hat_knn_1 <- predict(knn_fit_1, test_data_st, type = "class")
 cm5<-confusionMatrix(y_hat_knn_1, test_data_st$Disease)
 cm5$table
 results=tibble(Model=c("glm_fit_1","glm_fit_2","glm_fit_3","knn_1","knn_2"), Accuracy=c(cm1$overall["Accuracy"],cm2$overall["Accuracy"],cm3$overall["Accuracy"],cm4$overall["Accuracy"],cm5$overall["Accuracy"]), Sensitivity=c(cm1$byClass["Sensitivity"],cm2$byClass["Sensitivity"],cm3$byClass["Sensitivity"],cm4$byClass["Sensitivity"],cm5$byClass["Sensitivity"] ), Specificity=c(cm1$byClass["Specificity"],cm2$byClass["Specificity"],cm3$byClass["Specificity"],cm4$byClass["Specificity"],cm5$byClass["Specificity"]))
-results%>%knitr::kable() 
+results%>%knitr::kable()
 
 
 
